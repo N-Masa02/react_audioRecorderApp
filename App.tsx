@@ -1,118 +1,101 @@
-/**
- * Sample React Native App
- * https://github.com/facebook/react-native
- *
- * @format
- */
+import React, { useEffect, useState } from 'react';
+import { View, Button, Text, PermissionsAndroid, Platform } from 'react-native';
+import AudioRecord from 'react-native-audio-record';
+import RNFS from 'react-native-fs';
+import Sound from 'react-native-sound';
 
-import React from 'react';
-import type {PropsWithChildren} from 'react';
-import {
-  SafeAreaView,
-  ScrollView,
-  StatusBar,
-  StyleSheet,
-  Text,
-  useColorScheme,
-  View,
-} from 'react-native';
+const App = () => {
+  const [recording, setRecording] = useState(false);
+  const [audioFile, setAudioFile] = useState('');
+  const [permissionGranted, setPermissionGranted] = useState(false);
 
-import {
-  Colors,
-  DebugInstructions,
-  Header,
-  LearnMoreLinks,
-  ReloadInstructions,
-} from 'react-native/Libraries/NewAppScreen';
-
-type SectionProps = PropsWithChildren<{
-  title: string;
-}>;
-
-function Section({children, title}: SectionProps): React.JSX.Element {
-  const isDarkMode = useColorScheme() === 'dark';
-  return (
-    <View style={styles.sectionContainer}>
-      <Text
-        style={[
-          styles.sectionTitle,
+  useEffect(() => {
+    const requestPermission = async () => {
+      if (Platform.OS === 'android') {
+        const granted = await PermissionsAndroid.request(
+          PermissionsAndroid.PERMISSIONS.RECORD_AUDIO,
           {
-            color: isDarkMode ? Colors.white : Colors.black,
+            title: 'Permission to use microphone',
+            message: 'We need your permission to use your microphone to record audio',
+            buttonNeutral: 'Ask Me Later',
+            buttonNegative: 'Cancel',
+            buttonPositive: 'OK',
           },
-        ]}>
-        {title}
-      </Text>
-      <Text
-        style={[
-          styles.sectionDescription,
-          {
-            color: isDarkMode ? Colors.light : Colors.dark,
-          },
-        ]}>
-        {children}
-      </Text>
-    </View>
-  );
-}
+        );
+        if (granted === PermissionsAndroid.RESULTS.GRANTED) {
+          setPermissionGranted(true);
+        } else {
+          console.log('Microphone permission denied');
+        }
+      } else {
+        setPermissionGranted(true);
+      }
+    };
 
-function App(): React.JSX.Element {
-  const isDarkMode = useColorScheme() === 'dark';
+    requestPermission();
 
-  const backgroundStyle = {
-    backgroundColor: isDarkMode ? Colors.darker : Colors.lighter,
+    const options = {
+      sampleRate: 16000,  // default 44100
+      channels: 1,        // 1 or 2, default 1
+      bitsPerSample: 16,  // 8 or 16, default 16
+      audioSource: 6,     // android only (see below)
+      wavFile: 'test.wav' // default 'audio.wav'
+    };
+
+    if (permissionGranted) {
+      AudioRecord.init(options);
+    }
+
+    return () => {
+      if (recording) {
+        AudioRecord.stop();
+      }
+    };
+  }, [permissionGranted]);
+
+  const startRecording = () => {
+    if (permissionGranted) {
+      setRecording(true);
+      AudioRecord.start();
+    } else {
+      console.log('Microphone permission not granted');
+    }
+  };
+
+  const stopRecording = async () => {
+    if (!recording) return;
+    let audioFile = await AudioRecord.stop();
+    setAudioFile(audioFile);
+    setRecording(false);
+    console.log('audioFile', audioFile);
+  };
+
+  const playRecording = () => {
+    if (audioFile) {
+      const sound = new Sound(audioFile, '', (error) => {
+        if (error) {
+          console.log('failed to load the sound', error);
+          return;
+        }
+        sound.play((success) => {
+          if (success) {
+            console.log('successfully finished playing');
+          } else {
+            console.log('playback failed due to audio decoding errors');
+          }
+        });
+      });
+    }
   };
 
   return (
-    <SafeAreaView style={backgroundStyle}>
-      <StatusBar
-        barStyle={isDarkMode ? 'light-content' : 'dark-content'}
-        backgroundColor={backgroundStyle.backgroundColor}
-      />
-      <ScrollView
-        contentInsetAdjustmentBehavior="automatic"
-        style={backgroundStyle}>
-        <Header />
-        <View
-          style={{
-            backgroundColor: isDarkMode ? Colors.black : Colors.white,
-          }}>
-          <Section title="Step One">
-            Edit <Text style={styles.highlight}>App.tsx</Text> to change this
-            screen and then come back to see your edits.
-          </Section>
-          <Section title="See Your Changes">
-            <ReloadInstructions />
-          </Section>
-          <Section title="Debug">
-            <DebugInstructions />
-          </Section>
-          <Section title="Learn More">
-            Read the docs to discover what to do next:
-          </Section>
-          <LearnMoreLinks />
-        </View>
-      </ScrollView>
-    </SafeAreaView>
+    <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
+      <Button title="Start Recording" onPress={startRecording} disabled={recording} />
+      <Button title="Stop Recording" onPress={stopRecording} disabled={!recording} />
+      {audioFile ? <Button title="Play Recording" onPress={playRecording} /> : null}
+      {audioFile ? <Text>Audio File: {audioFile}</Text> : null}
+    </View>
   );
-}
-
-const styles = StyleSheet.create({
-  sectionContainer: {
-    marginTop: 32,
-    paddingHorizontal: 24,
-  },
-  sectionTitle: {
-    fontSize: 24,
-    fontWeight: '600',
-  },
-  sectionDescription: {
-    marginTop: 8,
-    fontSize: 18,
-    fontWeight: '400',
-  },
-  highlight: {
-    fontWeight: '700',
-  },
-});
+};
 
 export default App;
